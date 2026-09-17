@@ -114,9 +114,10 @@ class Utility(commands.Cog):
             value=(
                 "`ban` `unban` `kick` `softban`\n"
                 "`mute` / `timeout` `unmute` `nick`\n"
-                "`warn` `warnings` `clearwarns`\n"
-                "`purge` `lock` `unlock` `slowmode`\n"
-                "`nuke` `hide` `show` `steal`"
+                "`/warn add` `/warn list` `/warn clear`\n"
+                "`purge` `steal`\n"
+                "`/channel lock` `unlock` `slowmode`\n"
+                "`/channel hide` `show` `nuke`"
             ),
             inline=True
         )
@@ -158,7 +159,7 @@ class Utility(commands.Cog):
             value=(
                 "`task` `tasks` `taskinfo`\n"
                 "`taskcomplete` `taskremove`\n"
-                "`tag` `tagcreate` `tagdelete` `taglist`"
+                "`/tag show` `create` `delete` `list`"
             ),
             inline=True
         )

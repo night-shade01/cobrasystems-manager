@@ -15,6 +15,9 @@ class Admin(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    # Owner-only controls live under a single slash group (counts as 1 of the 100 global command slots).
+    bot_group = app_commands.Group(name="bot", description="Bot owner controls")
+
     def get_embed(self, title: str, description: str = None, color=None):
         embed = discord.Embed(
             title=title,
@@ -25,13 +28,20 @@ class Admin(commands.Cog):
         return embed
 
     @commands.is_owner()
-    @commands.hybrid_command(name="shutdown", description="Shut down the bot (owner only)")
+    @commands.hybrid_group(name="bot", description="Bot owner controls", fallback="shutdown")
+    async def bot_group_cmd(self, ctx: commands.Context):
+        """`/bot shutdown` — shut down the bot (owner only)."""
+        await ctx.send(embed=self.get_embed("⏹️ Shutting down", "Bye!"))
+        await self.bot.close()
+
+    @commands.is_owner()
+    @bot_group.command(name="shutdown", description="Shut down the bot (owner only)")
     async def shutdown(self, ctx: commands.Context):
         await ctx.send(embed=self.get_embed("⏹️ Shutting down", "Bye!"))
         await self.bot.close()
 
     @commands.is_owner()
-    @commands.hybrid_command(name="reload", description="Reload an extension (owner only)")
+    @bot_group.command(name="reload", description="Reload an extension (owner only)")
     async def reload(self, ctx: commands.Context, extension: str):
         try:
             await self.bot.unload_extension(extension)
@@ -41,7 +51,7 @@ class Admin(commands.Cog):
             await ctx.send(embed=self.get_embed("❌ Failed", str(e), 0xFF0000))
 
     @commands.is_owner()
-    @commands.hybrid_command(name="load", description="Load an extension (owner only)")
+    @bot_group.command(name="load", description="Load an extension (owner only)")
     async def load(self, ctx: commands.Context, extension: str):
         try:
             await self.bot.load_extension(extension)
@@ -50,7 +60,7 @@ class Admin(commands.Cog):
             await ctx.send(embed=self.get_embed("❌ Failed", str(e), 0xFF0000))
 
     @commands.is_owner()
-    @commands.hybrid_command(name="unload", description="Unload an extension (owner only)")
+    @bot_group.command(name="unload", description="Unload an extension (owner only)")
     async def unload(self, ctx: commands.Context, extension: str):
         try:
             await self.bot.unload_extension(extension)
@@ -59,7 +69,7 @@ class Admin(commands.Cog):
             await ctx.send(embed=self.get_embed("❌ Failed", str(e), 0xFF0000))
 
     @commands.is_owner()
-    @commands.hybrid_command(name="sync", description="Sync application commands (owner only)")
+    @bot_group.command(name="sync", description="Sync application commands (owner only)")
     async def sync(self, ctx: commands.Context, spec: str = None):
         try:
             if spec == "~":
@@ -71,7 +81,7 @@ class Admin(commands.Cog):
             await ctx.send(embed=self.get_embed("❌ Failed", str(e), 0xFF0000))
 
     @commands.is_owner()
-    @commands.hybrid_command(name="eval", description="Evaluate Python code (owner only)")
+    @bot_group.command(name="eval", description="Evaluate Python code (owner only)")
     async def _eval(self, ctx: commands.Context, *, body: str):
         env = {
             'bot': self.bot,
@@ -106,7 +116,7 @@ class Admin(commands.Cog):
             await ctx.send(embed=self.get_embed("✅ Eval Result", f"``\n{out}\n```"))
 
     @commands.is_owner()
-    @commands.hybrid_command(name="migrate_config_to_db", description="Migrate local config.json to MongoDB (owner only)")
+    @bot_group.command(name="migrate_config", description="Migrate local config.json to MongoDB (owner only)")
     async def migrate_config_to_db(self, ctx: commands.Context):
         if not hasattr(self.bot, "db"):
             return await ctx.send(embed=self.get_embed("❌ No DB", "MongoDB not configured."))
@@ -120,7 +130,7 @@ class Admin(commands.Cog):
             await ctx.send(embed=self.get_embed("❌ Failed", str(e), 0xFF0000))
 
     @commands.is_owner()
-    @commands.hybrid_command(name="export_config", description="Export config from DB to local config.json (owner only)")
+    @bot_group.command(name="export_config", description="Export config from DB to local config.json (owner only)")
     async def export_config(self, ctx: commands.Context):
         if not hasattr(self.bot, "db"):
             return await ctx.send(embed=self.get_embed("❌ No DB", "MongoDB not configured."))
@@ -135,7 +145,7 @@ class Admin(commands.Cog):
             await ctx.send(embed=self.get_embed("❌ Failed", str(e), 0xFF0000))
 
     @commands.is_owner()
-    @commands.hybrid_command(name="migrate_json_to_db", description="Migrate existing JSON stores (warnings, reminders, reaction_roles, giveaways) into MongoDB")
+    @bot_group.command(name="migrate_json", description="Migrate existing JSON stores (warnings, reminders, reaction_roles, giveaways) into MongoDB")
     async def migrate_json_to_db(self, ctx: commands.Context):
         if not hasattr(self.bot, "db"):
             return await ctx.send(embed=self.get_embed("❌ No DB", "MongoDB not configured."))
