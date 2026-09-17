@@ -38,7 +38,7 @@ class Giveaways(commands.Cog):
             self.bot.config.setdefault("giveaways", []).append(data)
             self.bot.save_config()
         embed = self.get_embed("🎉 Giveaway", f"Prize: {prize}\nEnds in: {duration}\nWinners: {winners}")
-        msg = await ctx.send(embed=embed)
+        msg = await ctx.send(embed=embed, ephemeral=False)
         # store message id
         if hasattr(self.bot, "db"):
             await self.bot.db["giveaways"].update_one({"_id": data.get("_id")}, {"$set": {"message_id": msg.id}})
@@ -67,8 +67,7 @@ class Giveaways(commands.Cog):
                     entries = []
                     for react in msg.reactions:
                         if str(react.emoji) == "🎉":
-                            users = await react.users().flatten()
-                            entries = [u for u in users if not u.bot]
+                            entries = [u async for u in react.users() if not u.bot]
                     winners = []
                     if entries:
                         winners = random.sample(entries, min(d.get("winners", 1), len(entries)))
@@ -88,8 +87,7 @@ class Giveaways(commands.Cog):
                         entries = []
                         for react in msg.reactions:
                             if str(react.emoji) == "🎉":
-                                users = await react.users().flatten()
-                                entries = [u for u in users if not u.bot]
+                                entries = [u async for u in react.users() if not u.bot]
                         winners = []
                         if entries:
                             winners = random.sample(entries, min(g.get("winners", 1), len(entries)))

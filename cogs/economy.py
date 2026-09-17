@@ -180,5 +180,63 @@ class Economy(commands.Cog):
             self.bot.save_config()
             await ctx.send(embed=self.get_embed("✅ Claimed", "You claimed **100** coins."))
 
+    # ==================== GAMBLING ====================
+    @commands.hybrid_command(name="slots", description="Bet coins on the slot machine")
+    @app_commands.describe(bet="Amount of coins to bet")
+    async def slots(self, ctx: commands.Context, bet: int):
+        if bet <= 0:
+            return await ctx.send(embed=self.get_embed("⚠️ Invalid", "Bet must be positive.", 0xFFAA00))
+        uid = str(ctx.author.id)
+        bal = await self._get_balance(uid)
+        if bal < bet:
+            return await ctx.send(embed=self.get_embed("⚠️ Insufficient", f"You only have **{bal}** coins.", 0xFFAA00))
+
+        emojis = ["🍒", "🍋", "🍇", "⭐", "💎", "7️⃣"]
+        reels = [random.choice(emojis) for _ in range(3)]
+        display = " | ".join(reels)
+
+        if len(set(reels)) == 1:
+            multiplier = 10 if reels[0] in ("💎", "7️⃣") else 5
+            winnings = bet * multiplier
+            await self._adjust_balance(uid, winnings - bet)
+            new_bal = await self._get_balance(uid)
+            result = f"🎰 **JACKPOT!** You won **{winnings}** coins!"
+        elif len(set(reels)) == 2:
+            await self._adjust_balance(uid, bet)
+            new_bal = await self._get_balance(uid)
+            result = f"Nice! Two of a kind — you won **{bet * 2}** coins!"
+        else:
+            await self._adjust_balance(uid, -bet)
+            new_bal = await self._get_balance(uid)
+            result = f"No match — you lost **{bet}** coins."
+
+        await ctx.send(embed=self.get_embed(
+            "🎰 Slots",
+            f"**{display}**\n\n{result}\nBalance: **{new_bal}** coins"
+        ))
+
+    @commands.hybrid_command(name="coinflip", description="Bet coins on a coin flip")
+    @app_commands.describe(bet="Amount of coins to bet", choice="heads or tails")
+    async def coinflip(self, ctx: commands.Context, bet: int, choice: str):
+        choice = choice.lower()
+        if choice not in ("heads", "tails"):
+            return await ctx.send(embed=self.get_embed("⚠️ Invalid", "Choose `heads` or `tails`.", 0xFFAA00))
+        if bet <= 0:
+            return await ctx.send(embed=self.get_embed("⚠️ Invalid", "Bet must be positive.", 0xFFAA00))
+        uid = str(ctx.author.id)
+        bal = await self._get_balance(uid)
+        if bal < bet:
+            return await ctx.send(embed=self.get_embed("⚠️ Insufficient", f"You only have **{bal}** coins.", 0xFFAA00))
+
+        result = random.choice(["heads", "tails"])
+        if result == choice:
+            await self._adjust_balance(uid, bet)
+            outcome = f"It landed on **{result}** — you won **{bet}** coins! 🎉"
+        else:
+            await self._adjust_balance(uid, -bet)
+            outcome = f"It landed on **{result}** — you lost **{bet}** coins. 😢"
+        new_bal = await self._get_balance(uid)
+        await ctx.send(embed=self.get_embed("🪙 Coin Flip", f"{outcome}\nBalance: **{new_bal}** coins"))
+
 async def setup(bot):
     await bot.add_cog(Economy(bot))

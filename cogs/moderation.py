@@ -4,6 +4,8 @@ from discord import app_commands
 from datetime import datetime, timedelta
 import json
 import os
+import re
+import aiohttp
 
 WARNINGS_FILE = "data/warnings.json"
 
@@ -322,6 +324,116 @@ class Moderation(commands.Cog):
             await ctx.send(embed=self.get_embed("🐢 Slowmode Disabled", f"Slowmode has been disabled in {ctx.channel.mention}."))
         else:
             await ctx.send(embed=self.get_embed("🐢 Slowmode Set", f"Slowmode set to **{seconds}** seconds in {ctx.channel.mention}."))
+
+    # ==================== NICKNAME ====================
+    @commands.hybrid_command(name="nick", description="Change a member's nickname", aliases=["nickname", "setnick"])
+    @commands.has_permissions(manage_nicknames=True)
+    @commands.bot_has_permissions(manage_nicknames=True)
+    @app_commands.describe(member="The member to rename", nickname="New nickname (leave empty to reset)")
+    async def nick(self, ctx: commands.Context, member: discord.Member, *, nickname: str = None):
+        if member.top_role >= ctx.guild.me.top_role:
+            return await ctx.send(embed=self.get_embed("⛔ Hierarchy Error", "I cannot change that member's nickname.", 0xFF0000))
+        try:
+            await member.edit(nick=nickname, reason=f"Nickname changed by {ctx.author}")
+            if nickname:
+                await ctx.send(embed=self.get_embed("✅ Nickname Set", f"{member.mention} is now known as **{nickname}**."))
+            else:
+                await ctx.send(embed=self.get_embed("✅ Nickname Reset", f"{member.mention}'s nickname was reset."))
+        except Exception as e:
+            await ctx.send(embed=self.get_embed("❌ Failed", str(e), 0xFF0000))
+
+    # ==================== SOFTBAN ====================
+    @commands.hybrid_command(name="softban", description="Ban then instantly unban a member to wipe their messages")
+    @commands.has_permissions(ban_members=True)
+    @commands.bot_has_permissions(ban_members=True)
+    @app_commands.describe(member="The member to softban", reason="Reason for the softban")
+    async def softban(self, ctx: commands.Context, member: discord.Member, reason: str = "No reason provided"):
+        if member.top_role >= ctx.author.top_role and ctx.author.id != ctx.guild.owner_id:
+            return await ctx.send(embed=self.get_embed("⛔ Hierarchy Error", "You cannot softban someone with equal or higher role.", 0xFF0000))
+        if member.top_role >= ctx.guild.me.top_role:
+            return await ctx.send(embed=self.get_embed("⛔ Hierarchy Error", "I cannot softban someone with equal or higher role than me.", 0xFF0000))
+        try:
+            await member.ban(reason=f"Softban: {reason} | By: {ctx.author}", delete_message_days=7)
+            await ctx.guild.unban(member, reason=f"Softban release | By: {ctx.author}")
+            await ctx.send(embed=self.get_embed(
+                "🧹 Member Softbanned",
+                f"**User:** {member} (`{member.id}`)\n**Moderator:** {ctx.author.mention}\n**Reason:** {reason}\nTheir recent messages were deleted and they can rejoin."
+            ))
+        except Exception as e:
+            await ctx.send(embed=self.get_embed("❌ Failed", str(e), 0xFF0000))
+
+    # ==================== NUKE ====================
+    @commands.hybrid_command(name="nuke", description="Clone and recreate the current channel, wiping all messages")
+    @commands.has_permissions(manage_channels=True)
+    @commands.bot_has_permissions(manage_channels=True)
+    async def nuke(self, ctx: commands.Context):
+        channel = ctx.channel
+        if not isinstance(channel, discord.TextChannel):
+            return await ctx.send(embed=self.get_embed("❌ Invalid Channel", "Only text channels can be nuked.", 0xFF0000))
+        try:
+            new_channel = await channel.clone(reason=f"Channel nuked by {ctx.author}")
+            await new_channel.edit(position=channel.position)
+            await channel.delete(reason=f"Channel nuked by {ctx.author}")
+            embed = self.get_embed("💥 Channel Nuked", "This channel has been wiped clean.")
+            embed.set_image(url="https://media.giphy.com/media/HhTXt43pk1I1W/giphy.gif")
+            await new_channel.send(embed=embed)
+        except discord.Forbidden:
+            await ctx.send(embed=self.get_embed("❌ Missing Permissions", "I need **Manage Channels** to nuke this channel.", 0xFF0000))
+        except Exception as e:
+            await ctx.send(embed=self.get_embed("❌ Failed", str(e), 0xFF0000))
+
+    # ==================== STEAL EMOJI ====================
+    @commands.hybrid_command(name="steal", description="Add a custom emoji from another server to this one", aliases=["addemoji"])
+    @commands.has_permissions(manage_expressions=True)
+    @commands.bot_has_permissions(manage_expressions=True)
+    @app_commands.describe(emoji="The custom emoji to steal", name="Name for the new emoji (defaults to the original name)")
+    async def steal(self, ctx: commands.Context, emoji: str, name: str = None):
+        match = re.match(r"<(a?):([a-zA-Z0-9_]+):(\d+)>", emoji.strip())
+        if not match:
+            return await ctx.send(embed=self.get_embed("⚠️ Invalid", "Please provide a custom emoji, not a standard one.", 0xFFAA00))
+
+        animated = bool(match.group(1))
+        emoji_name = name or match.group(2)
+        emoji_id = match.group(3)
+        extension = "gif" if animated else "png"
+        url = f"https://cdn.discordapp.com/emojis/{emoji_id}.{extension}"
+
+        try:
+            timeout = aiohttp.ClientTimeout(total=10)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(url) as resp:
+                    if resp.status != 200:
+                        return await ctx.send(embed=self.get_embed("❌ Failed", "Couldn't download that emoji.", 0xFF0000))
+                    image_data = await resp.read()
+            created = await ctx.guild.create_custom_emoji(
+                name=emoji_name,
+                image=image_data,
+                reason=f"Emoji stolen by {ctx.author}",
+            )
+            await ctx.send(embed=self.get_embed("✅ Emoji Added", f"Added {created} as `{created.name}`."))
+        except discord.Forbidden:
+            await ctx.send(embed=self.get_embed("❌ Missing Permissions", "I need **Manage Expressions** to add emojis.", 0xFF0000))
+        except Exception as e:
+            await ctx.send(embed=self.get_embed("❌ Failed", str(e), 0xFF0000))
+
+    # ==================== HIDE / SHOW ====================
+    @commands.hybrid_command(name="hide", description="Hide the current channel from @everyone")
+    @commands.has_permissions(manage_channels=True)
+    @commands.bot_has_permissions(manage_channels=True)
+    async def hide(self, ctx: commands.Context):
+        overwrite = ctx.channel.overwrites_for(ctx.guild.default_role)
+        overwrite.view_channel = False
+        await ctx.channel.set_permissions(ctx.guild.default_role, overwrite=overwrite)
+        await ctx.send(embed=self.get_embed("🙈 Channel Hidden", f"{ctx.channel.mention} is now hidden from @everyone."))
+
+    @commands.hybrid_command(name="show", description="Make a hidden channel visible to @everyone again")
+    @commands.has_permissions(manage_channels=True)
+    @commands.bot_has_permissions(manage_channels=True)
+    async def show(self, ctx: commands.Context):
+        overwrite = ctx.channel.overwrites_for(ctx.guild.default_role)
+        overwrite.view_channel = None
+        await ctx.channel.set_permissions(ctx.guild.default_role, overwrite=overwrite)
+        await ctx.send(embed=self.get_embed("👁️ Channel Visible", f"{ctx.channel.mention} is visible to @everyone again."))
 
 async def setup(bot):
     await bot.add_cog(Moderation(bot))

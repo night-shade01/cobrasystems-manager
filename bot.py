@@ -93,45 +93,19 @@ bot.footer = config.get("footer", "Cobra Systems™ Manager")
 _original_context_send = commands.Context.send
 
 
-async def send_with_fake_embed(self, *args, **kwargs):
-    """Show a short-lived placeholder embed before the real command response."""
-    bypass_fake = kwargs.pop("bypass_fake", False)
-    if bypass_fake:
-        return await _original_context_send(self, *args, **kwargs)
-
-    fake_embed = discord.Embed(
-        title="🐍 Cobra Systems™ Manager",
-        description="Working on it...",
-        color=0x2B2D31,
-    )
-
-    temp_message = None
-    try:
-        if getattr(self, "interaction", None) is not None and not self.interaction.response.is_done():
-            try:
-                await self.interaction.response.defer(thinking=True)
-            except discord.HTTPException:
-                pass
-
-        temp_message = await self.channel.send(embed=fake_embed)
-        await asyncio.sleep(0.35)
-        await temp_message.delete()
-    except Exception:
-        pass
-
-    return await _original_context_send(self, *args, **kwargs)
-
-
-commands.Context.send = send_with_fake_embed
-
-
 async def send_response(ctx, **kwargs):
-    """Send a response that works for both prefix and hybrid command interactions."""
+    """Send a hidden (ephemeral) response for slash commands.
+
+    Prefix commands keep their normal public replies; slash commands are
+    hidden from everyone except the person who ran them.
+    """
     interaction = getattr(ctx, "interaction", None)
 
     if interaction is None:
-        return await ctx.send(**kwargs)
+        kwargs.pop("ephemeral", None)
+        return await _original_context_send(ctx, **kwargs)
 
+    kwargs.setdefault("ephemeral", True)
     try:
         if interaction.response.is_done():
             return await interaction.followup.send(**kwargs)
@@ -140,6 +114,58 @@ async def send_response(ctx, **kwargs):
         fallback_kwargs = dict(kwargs)
         fallback_kwargs.pop("ephemeral", None)
         return await ctx.channel.send(**fallback_kwargs)
+
+
+async def send_public(ctx, *args, **kwargs):
+    """Send a public channel message WITHOUT revealing who ran the command.
+
+    The interaction is deferred ephemerally and the placeholder deleted, so
+    the message appears as a standalone bot post with no "user used command"
+    indicator attached to it.
+    """
+    kwargs.pop("ephemeral", None)
+    interaction = getattr(ctx, "interaction", None)
+
+    if interaction is None:
+        return await _original_context_send(ctx, *args, **kwargs)
+
+    if not interaction.response.is_done():
+        try:
+            await interaction.response.defer(ephemeral=True)
+        except (discord.HTTPException, discord.NotFound):
+            pass
+
+    message = await ctx.channel.send(*args, **kwargs)
+
+    try:
+        await interaction.delete_original_response()
+    except (discord.HTTPException, discord.NotFound):
+        pass
+
+    return message
+
+
+async def _stealth_send(self, *args, **kwargs):
+    """Patched ``Context.send`` used by every cog.
+
+    * Prefix commands behave normally.
+    * Slash commands are hidden (ephemeral) by default so nobody else can
+      see the bot's response.
+    * Passing ``ephemeral=False`` sends a *silent public* message instead:
+      posted straight to the channel with no command usage shown.
+    """
+    interaction = getattr(self, "interaction", None)
+    if interaction is None:
+        kwargs.pop("ephemeral", None)
+        return await _original_context_send(self, *args, **kwargs)
+
+    ephemeral = kwargs.pop("ephemeral", True)
+    if ephemeral:
+        return await send_response(self, *args, **kwargs)
+    return await send_public(self, *args, **kwargs)
+
+
+commands.Context.send = _stealth_send
 
 async def load_cogs():
     cogs = [

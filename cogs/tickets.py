@@ -404,7 +404,7 @@ class Tickets(commands.Cog):
         if not is_owner and not can_manage:
             return await ctx.send(embed=self.get_embed("⛔ Not Allowed", "Only the ticket opener or staff can close this ticket.", 0xFF0000))
 
-        await ctx.send(embed=self.get_embed("🔒 Closing Ticket", "This ticket will be deleted in 3 seconds."))
+        await ctx.send(embed=self.get_embed("🔒 Closing Ticket", "This ticket will be deleted in 3 seconds."), ephemeral=False)
         await asyncio.sleep(3)
         try:
             close_view = TicketCloseView(self.bot)
@@ -428,7 +428,7 @@ class Tickets(commands.Cog):
             return await ctx.send(embed=self.get_embed("❌ Invalid Name", "Please provide a valid channel name." , 0xFF0000))
 
         await channel.edit(name=safe_name, reason=f"Ticket renamed by {ctx.author}")
-        await ctx.send(embed=self.get_embed("✅ Renamed", f"Ticket renamed to `{safe_name}`."))
+        await ctx.send(embed=self.get_embed("✅ Renamed", f"Ticket renamed to `{safe_name}`."), ephemeral=False)
 
 
 async def setup(bot):

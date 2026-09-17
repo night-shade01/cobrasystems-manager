@@ -25,7 +25,7 @@ class Polls(commands.Cog):
         emojis = ["1️⃣","2️⃣","3️⃣","4️⃣","5️⃣","6️⃣","7️⃣","8️⃣","9️⃣","🔟"]
         desc = "\n".join(f"{emojis[i]} {opt}" for i,opt in enumerate(options))
         embed = self.get_embed(question, desc)
-        msg = await ctx.send(embed=embed)
+        msg = await ctx.send(embed=embed, ephemeral=False)
         for i in range(len(options)):
             try:
                 await msg.add_reaction(emojis[i])

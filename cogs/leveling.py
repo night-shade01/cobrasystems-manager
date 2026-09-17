@@ -42,12 +42,30 @@ class Leveling(commands.Cog):
             xp = random.randint(5, 15)
             await self._add_xp(str(message.author.id), xp)
 
-    @commands.hybrid_command(name="level", description="Show a member's XP/level")
+    @commands.hybrid_command(name="level", description="Show a member's XP/level", aliases=["rank"])
     async def level(self, ctx: commands.Context, member: discord.Member = None):
         member = member or ctx.author
         xp = await self._get_xp(str(member.id))
         level = int((xp // 100) ** 0.5 * 10)  # simple progression
         await ctx.send(embed=self.get_embed("📈 Level", f"{member.mention}: Level **{level}** • XP **{xp}**"))
+
+    @commands.hybrid_command(name="levels", description="Show the server XP leaderboard", aliases=["xptop", "leveltop"])
+    async def levels(self, ctx: commands.Context):
+        if hasattr(self.bot, "db"):
+            docs = await self.bot.db["levels"].find().sort("xp", -1).limit(10).to_list(length=10)
+            rows = [(int(d.get("xp", 0)), str(d.get("user_id"))) for d in docs]
+        else:
+            cfg = self.bot.config.get("levels", {})
+            rows = sorted(((int(xp), str(uid)) for uid, xp in cfg.items()), reverse=True)[:10]
+
+        if not rows:
+            return await ctx.send(embed=self.get_embed("📈 Levels", "Nobody has earned XP yet. Start chatting!"))
+
+        lines = []
+        for index, (xp, uid) in enumerate(rows, 1):
+            level = int((xp // 100) ** 0.5 * 10)
+            lines.append(f"**{index}.** <@{uid}> — Level **{level}** • {xp} XP")
+        await ctx.send(embed=self.get_embed("📈 XP Leaderboard", "\n".join(lines)))
 
 async def setup(bot):
     await bot.add_cog(Leveling(bot))

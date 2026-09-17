@@ -248,5 +248,35 @@ class ServerManagement(commands.Cog):
             text += f"Slowmode: {channel.slowmode_delay}s\n"
         await ctx.send(embed=self.get_embed(f"📌 Channel Info — {channel.name}", text))
 
+    @commands.hybrid_command(name="dm", description="Send a DM to a member as the bot")
+    @commands.has_permissions(manage_guild=True)
+    @app_commands.describe(member="The member to DM", message="The message to send")
+    async def dm(self, ctx: commands.Context, member: discord.Member, *, message: str):
+        embed = self.get_embed(f"📩 Message from {ctx.guild.name}", message)
+        try:
+            await member.send(embed=embed)
+            await ctx.send(embed=self.get_embed("✅ DM Sent", f"Message delivered to {member.mention}."))
+        except discord.Forbidden:
+            await ctx.send(embed=self.get_embed("❌ Failed", f"{member.mention} has DMs disabled.", 0xFF0000))
+
+    @commands.hybrid_command(name="createrole", description="Create a new role")
+    @commands.has_permissions(manage_roles=True)
+    @commands.bot_has_permissions(manage_roles=True)
+    @app_commands.describe(name="Name of the role", color="Hex color like #00ff9f", hoisted="Show role separately in the member list")
+    async def createrole(self, ctx: commands.Context, name: str, color: str = None, hoisted: bool = False):
+        role_color = discord.Color(self.bot.embed_color)
+        if color:
+            try:
+                role_color = discord.Color(int(color.strip().lstrip("#"), 16))
+            except ValueError:
+                return await ctx.send(embed=self.get_embed("⚠️ Invalid Color", "Use a hex color like `#00ff9f`.", 0xFFAA00))
+        try:
+            role = await ctx.guild.create_role(name=name, color=role_color, hoist=hoisted, reason=f"Created by {ctx.author}")
+            await ctx.send(embed=self.get_embed("✅ Role Created", f"Created {role.mention}."))
+        except discord.Forbidden:
+            await ctx.send(embed=self.get_embed("❌ Missing Permissions", "I need **Manage Roles** to do that.", 0xFF0000))
+        except Exception as e:
+            await ctx.send(embed=self.get_embed("❌ Failed", str(e), 0xFF0000))
+
 async def setup(bot):
     await bot.add_cog(ServerManagement(bot))

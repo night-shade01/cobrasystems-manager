@@ -8,6 +8,8 @@ import os
 import json
 import uuid
 import asyncio
+import ast
+import operator
 
 REMINDERS_FILE = "data/reminders.json"
 
@@ -17,6 +19,8 @@ class Utility(commands.Cog):
         self.start_time = time.time()
         self.use_db = hasattr(bot, "db")
         self.reminders = {} if self.use_db else self.load_reminders()
+        # channel_id -> last deleted message snapshot for /snipe
+        self.sniped_messages = {}
         # start background reminder loop
         try:
             self.bot.loop.create_task(self._reminder_loop())
@@ -102,16 +106,17 @@ class Utility(commands.Cog):
     async def help(self, ctx: commands.Context):
         embed = self.get_embed(
             "🐍 Cobra Systems™ Manager — Help",
-            "A powerful server management bot.\nUse `/command` or `!command`."
+            "A powerful server management bot.\nUse `/command` or `!command`.\nReplies are hidden so only you can see them."
         )
 
         embed.add_field(
             name="🛡️ Moderation",
             value=(
-                "`ban` `unban` `kick`\n"
-                "`mute` / `timeout` `unmute`\n"
+                "`ban` `unban` `kick` `softban`\n"
+                "`mute` / `timeout` `unmute` `nick`\n"
                 "`warn` `warnings` `clearwarns`\n"
-                "`purge` `lock` `unlock` `slowmode`"
+                "`purge` `lock` `unlock` `slowmode`\n"
+                "`nuke` `hide` `show` `steal`"
             ),
             inline=True
         )
@@ -129,9 +134,21 @@ class Utility(commands.Cog):
         embed.add_field(
             name="🔧 Utility",
             value=(
-                "`help` `ping` `uptime`\n"
-                "`userinfo` `serverinfo`\n"
-                "`avatar` `roleinfo`"
+                "`help` `ping` `uptime` `botinfo`\n"
+                "`userinfo` `serverinfo` `membercount`\n"
+                "`avatar` `roleinfo` `invite`\n"
+                "`embed` `say` `calc` `snipe`\n"
+                "`remindme` `reminders` `cancelreminder`"
+            ),
+            inline=True
+        )
+        embed.add_field(
+            name="🎉 Fun",
+            value=(
+                "`coin` `roll` `choose` `rps`\n"
+                "`8ball` `rate` `ship` `joke`\n"
+                "`mock` `emojify` `reverse` `clap`\n"
+                "`catfact` `dogpic`"
             ),
             inline=True
         )
@@ -140,7 +157,8 @@ class Utility(commands.Cog):
             name="� Tasks",
             value=(
                 "`task` `tasks` `taskinfo`\n"
-                "`taskcomplete` `taskremove`"
+                "`taskcomplete` `taskremove`\n"
+                "`tag` `tagcreate` `tagdelete` `taglist`"
             ),
             inline=True
         )
@@ -148,7 +166,9 @@ class Utility(commands.Cog):
         embed.add_field(
             name="🛠️ Server Management",
             value=(
-                "`announce` `setservername` `channelinfo`"
+                "`announce` `setservername`\n"
+                "`channelinfo` `dm` `createrole`\n"
+                "`poll` `startgiveaway` `setstarboard`"
             ),
             inline=True
         )
@@ -157,7 +177,8 @@ class Utility(commands.Cog):
             name="�💰 Economy",
             value=(
                 "`balance` `give` `daily` `work`\n"
-                "`leaderboard`\n"
+                "`slots` `coinflip`\n"
+                "`leaderboard` `level` / `rank` `levels`\n"
                 "Admin: `addmoney` `removemoney`\n"
                 "`setmoney` `resetmoney`"
             ),
@@ -348,6 +369,171 @@ class Utility(commands.Cog):
         embed.add_field(name="Mentionable", value="Yes" if role.mentionable else "No", inline=True)
         embed.add_field(name="Hoisted", value="Yes" if role.hoist else "No", inline=True)
         embed.add_field(name="Created", value=f"<t:{int(role.created_at.timestamp())}:R>", inline=True)
+        await ctx.send(embed=embed)
+
+    # ==================== EMBED BUILDER ====================
+    @commands.hybrid_command(name="embed", description="Build and post a custom embed (posted silently)")
+    @commands.has_permissions(manage_messages=True)
+    @commands.bot_has_permissions(send_messages=True, embed_links=True)
+    @app_commands.describe(
+        title="Embed title",
+        description="Embed body text (use \\n for line breaks)",
+        channel="Channel to post in (defaults to this one)",
+        color="Hex color like #00ff9f",
+        image="Large image URL",
+        thumbnail="Small thumbnail URL",
+        footer="Footer text"
+    )
+    async def embed(self, ctx: commands.Context, title: str, description: str, channel: discord.TextChannel = None, color: str = None, image: str = None, thumbnail: str = None, footer: str = None):
+        parsed_color = self.bot.embed_color
+        if color:
+            try:
+                parsed_color = int(color.strip().lstrip("#"), 16)
+            except ValueError:
+                return await ctx.send(embed=self.get_embed("⚠️ Invalid Color", "Use a hex color like `#00ff9f`.", 0xFFAA00))
+
+        custom_embed = discord.Embed(
+            title=title,
+            description=description.replace("\\n", "\n"),
+            color=parsed_color,
+            timestamp=datetime.utcnow()
+        )
+        if image:
+            custom_embed.set_image(url=image)
+        if thumbnail:
+            custom_embed.set_thumbnail(url=thumbnail)
+        custom_embed.set_footer(text=footer or self.bot.footer)
+
+        target = channel or ctx.channel
+        if channel is not None and channel.id != ctx.channel.id:
+            await target.send(embed=custom_embed)
+            await ctx.send(embed=self.get_embed("✅ Embed Posted", f"Your embed was posted in {target.mention}."))
+        else:
+            # Silent public post: no "user used command" indicator
+            await ctx.send(embed=custom_embed, ephemeral=False)
+
+    # ==================== SAY ====================
+    @commands.hybrid_command(name="say", description="Make the bot say something (posted silently)")
+    @commands.has_permissions(manage_messages=True)
+    @app_commands.describe(message="What the bot should say", channel="Channel to send it in (defaults to this one)")
+    async def say(self, ctx: commands.Context, message: str, channel: discord.TextChannel = None):
+        target = channel or ctx.channel
+        if channel is not None and channel.id != ctx.channel.id:
+            await target.send(message)
+            await ctx.send(embed=self.get_embed("✅ Sent", f"Message sent to {target.mention}."))
+        else:
+            if ctx.interaction is None:
+                try:
+                    await ctx.message.delete()
+                except (discord.Forbidden, discord.NotFound):
+                    pass
+            await ctx.send(message, ephemeral=False)
+
+    # ==================== BOTINFO ====================
+    @commands.hybrid_command(name="botinfo", description="Show information about the bot", aliases=["about"])
+    async def botinfo(self, ctx: commands.Context):
+        seconds = int(time.time() - self.start_time)
+        days, remainder = divmod(seconds, 86400)
+        hours, remainder = divmod(remainder, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        uptime_str = f"{days}d {hours}h {minutes}m {seconds}s"
+
+        total_users = sum(g.member_count or 0 for g in self.bot.guilds)
+        embed = self.get_embed("🐍 Bot Info", None)
+        embed.set_thumbnail(url=self.bot.user.display_avatar.url)
+        embed.add_field(name="Servers", value=len(self.bot.guilds), inline=True)
+        embed.add_field(name="Users", value=total_users, inline=True)
+        embed.add_field(name="Commands", value=len(self.bot.tree.get_commands()), inline=True)
+        embed.add_field(name="Uptime", value=uptime_str, inline=True)
+        embed.add_field(name="Latency", value=f"{round(self.bot.latency * 1000)}ms", inline=True)
+        embed.add_field(name="Python", value=platform.python_version(), inline=True)
+        embed.add_field(name="discord.py", value=discord.__version__, inline=True)
+        embed.add_field(name="Database", value="MongoDB" if hasattr(self.bot, "db") else "JSON files", inline=True)
+        await ctx.send(embed=embed)
+
+    # ==================== INVITE ====================
+    @commands.hybrid_command(name="invite", description="Get the bot's invite link")
+    async def invite(self, ctx: commands.Context):
+        url = discord.utils.oauth_url(
+            self.bot.user.id,
+            permissions=discord.Permissions(administrator=True),
+            scopes=("bot", "applications.commands"),
+        )
+        embed = self.get_embed("🔗 Invite Me", f"[Click here to invite the bot]({url})")
+        await ctx.send(embed=embed)
+
+    # ==================== MEMBERCOUNT ====================
+    @commands.hybrid_command(name="membercount", description="Show member counts for the server", aliases=["members"])
+    async def membercount(self, ctx: commands.Context):
+        guild = ctx.guild
+        humans = sum(1 for m in guild.members if not m.bot)
+        bots = sum(1 for m in guild.members if m.bot)
+        embed = self.get_embed("👥 Member Count", None)
+        embed.add_field(name="Total", value=guild.member_count, inline=True)
+        embed.add_field(name="Humans", value=humans, inline=True)
+        embed.add_field(name="Bots", value=bots, inline=True)
+        await ctx.send(embed=embed)
+
+    # ==================== CALC ====================
+    _CALC_OPS = {
+        ast.Add: operator.add,
+        ast.Sub: operator.sub,
+        ast.Mult: operator.mul,
+        ast.Div: operator.truediv,
+        ast.FloorDiv: operator.floordiv,
+        ast.Mod: operator.mod,
+        ast.Pow: operator.pow,
+    }
+
+    def _calc_eval(self, node):
+        if isinstance(node, ast.Expression):
+            return self._calc_eval(node.body)
+        if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+            return node.value
+        if isinstance(node, ast.BinOp) and type(node.op) in self._CALC_OPS:
+            return self._CALC_OPS[type(node.op)](self._calc_eval(node.left), self._calc_eval(node.right))
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
+            value = self._calc_eval(node.operand)
+            return value if isinstance(node.op, ast.UAdd) else -value
+        raise ValueError("Unsupported expression")
+
+    @commands.hybrid_command(name="calc", description="Do quick math (e.g. 2+2*10)", aliases=["math"])
+    @app_commands.describe(expression="Math expression like 2+2*10 or (5*3)/2")
+    async def calc(self, ctx: commands.Context, *, expression: str):
+        try:
+            tree = ast.parse(expression, mode="eval")
+            result = self._calc_eval(tree)
+            await ctx.send(embed=self.get_embed("🧮 Calculator", f"`{expression}` = **{result}**"))
+        except Exception:
+            await ctx.send(embed=self.get_embed("⚠️ Invalid Expression", "I can only handle basic math: `+ - * / // % **` and parentheses.", 0xFFAA00))
+
+    # ==================== SNIPE ====================
+    @commands.Cog.listener()
+    async def on_message_delete(self, message: discord.Message):
+        if message.author.bot or not message.guild:
+            return
+        self.sniped_messages[message.channel.id] = {
+            "content": message.content or "",
+            "author": str(message.author),
+            "author_id": message.author.id,
+            "avatar": message.author.display_avatar.url,
+            "attachments": [a.url for a in message.attachments],
+            "deleted_at": int(time.time()),
+        }
+
+    @commands.hybrid_command(name="snipe", description="Show the last deleted message in this channel")
+    @commands.has_permissions(manage_messages=True)
+    async def snipe(self, ctx: commands.Context):
+        data = self.sniped_messages.get(ctx.channel.id)
+        if not data:
+            return await ctx.send(embed=self.get_embed("🔭 Snipe", "Nothing to snipe here."))
+        description = data["content"] or "*(no text content)*"
+        if data["attachments"]:
+            description += "\n\n**Attachments:** " + " ".join(data["attachments"])
+        embed = self.get_embed("🔭 Sniped Message", description)
+        embed.set_author(name=data["author"], icon_url=data["avatar"])
+        embed.set_footer(text=f"{self.bot.footer} • Deleted at")
+        embed.timestamp = datetime.fromtimestamp(data["deleted_at"])
         await ctx.send(embed=embed)
 
 async def setup(bot):

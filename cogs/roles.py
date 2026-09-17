@@ -107,7 +107,7 @@ class Roles(commands.Cog):
         embed.add_field(name="Role", value=role.mention, inline=True)
         embed.add_field(name="Emoji", value=emoji, inline=True)
 
-        msg = await ctx.send(embed=embed)
+        msg = await ctx.send(embed=embed, ephemeral=False)
         try:
             await msg.add_reaction(emoji)
         except discord.HTTPException:
