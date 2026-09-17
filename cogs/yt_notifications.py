@@ -13,17 +13,24 @@ class YTNotifications(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        self.session = aiohttp.ClientSession()
-        self.task = bot.loop.create_task(self.loop_poll())
+        self.session: aiohttp.ClientSession = None
+        self.task = None
         self.api_key = os.getenv("YT_API_KEY")
+
+    async def cog_load(self):
+        # Created inside the running event loop (unlike __init__, which may run before it)
+        self.session = aiohttp.ClientSession()
+        self.task = asyncio.create_task(self.loop_poll())
 
     def cog_unload(self):
         try:
-            self.task.cancel()
+            if self.task:
+                self.task.cancel()
         except Exception:
             pass
         try:
-            asyncio.create_task(self.session.close())
+            if self.session:
+                asyncio.create_task(self.session.close())
         except Exception:
             pass
 

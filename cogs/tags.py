@@ -8,16 +8,15 @@ class Tags(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    tag_group = app_commands.Group(name="tag", description="Create and view server tags")
-
     def get_embed(self, title: str, description: str = None, color=None):
         embed = discord.Embed(title=title, description=description, color=color or self.bot.embed_color, timestamp=datetime.utcnow())
         embed.set_footer(text=self.bot.footer)
         return embed
 
     @commands.hybrid_group(name="tag", description="Create and view server tags", fallback="show")
-    async def tag_group_cmd(self, ctx: commands.Context, name: str = None):
-        """`/tag show <name>` — display a tag's content."""
+    @app_commands.describe(name="The tag to show")
+    async def tag(self, ctx: commands.Context, name: str = None):
+        """`/tag show <name>` — display a tag's content publicly."""
         if name is None:
             return await self.list_tags(ctx)
         await self._show_tag(ctx, name)
@@ -35,11 +34,7 @@ class Tags(commands.Cog):
                 return await ctx.send(embed=self.get_embed("❌ Not Found", "Tag not found.", 0xFF0000))
             await ctx.send(content, ephemeral=False)
 
-    @tag_group.command(name="show", description="Show a tag (posted publicly)")
-    async def tag(self, ctx: commands.Context, name: str):
-        await self._show_tag(ctx, name)
-
-    @tag_group.command(name="create", description="Create a tag")
+    @tag.command(name="create", description="Create a tag")
     @commands.has_permissions(manage_guild=True)
     async def tagcreate(self, ctx: commands.Context, name: str, *, content: str):
         gid = str(ctx.guild.id)
@@ -50,7 +45,7 @@ class Tags(commands.Cog):
             self.bot.save_config()
         await ctx.send(embed=self.get_embed("✅ Created", f"Tag `{name}` saved."))
 
-    @tag_group.command(name="delete", description="Delete a tag")
+    @tag.command(name="delete", description="Delete a tag")
     @commands.has_permissions(manage_guild=True)
     async def tagdelete(self, ctx: commands.Context, name: str):
         gid = str(ctx.guild.id)
@@ -66,7 +61,7 @@ class Tags(commands.Cog):
             self.bot.save_config()
         await ctx.send(embed=self.get_embed("✅ Deleted", f"Tag `{name}` deleted."))
 
-    @tag_group.command(name="list", description="List all tags in this server")
+    @tag.command(name="list", description="List all tags in this server")
     async def list_tags(self, ctx: commands.Context):
         gid = str(ctx.guild.id)
         if hasattr(self.bot, "db"):

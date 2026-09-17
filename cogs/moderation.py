@@ -19,10 +19,6 @@ class Moderation(commands.Cog):
         else:
             self.warnings = None
 
-    # Slash groups (each group only counts as 1 of the 100 global command slots)
-    warn_group = app_commands.Group(name="warn", description="Manage member warnings")
-    channel_group = app_commands.Group(name="channel", description="Channel moderation controls")
-
     def load_warnings(self):
         if not os.path.exists(WARNINGS_FILE):
             return {}
@@ -179,10 +175,9 @@ class Moderation(commands.Cog):
     # ==================== WARN ====================
     @commands.hybrid_group(name="warn", description="Manage member warnings", fallback="add")
     @commands.has_permissions(moderate_members=True)
-    async def warn_group_cmd(self, ctx: commands.Context, member: discord.Member = None, *, reason: str = "No reason provided"):
+    @app_commands.describe(member="The member to warn", reason="Reason for the warning")
+    async def warn(self, ctx: commands.Context, member: discord.Member, *, reason: str = "No reason provided"):
         """`/warn add <member> [reason]` — warn a member."""
-        if member is None:
-            return await ctx.send(embed=self.get_embed("⚠️ Missing Member", "Mention a member to warn, e.g. `/warn add @user spamming`.", 0xFFAA00))
         await self._warn_member(ctx, member, reason)
 
     async def _warn_member(self, ctx: commands.Context, member: discord.Member, reason: str):
@@ -222,14 +217,8 @@ class Moderation(commands.Cog):
         except Exception:
             pass
 
-    @warn_group.command(name="add", description="Warn a member")
-    @commands.has_permissions(moderate_members=True)
-    @app_commands.describe(member="The member to warn", reason="Reason for the warning")
-    async def warn(self, ctx: commands.Context, member: discord.Member, reason: str = "No reason provided"):
-        await self._warn_member(ctx, member, reason)
-
     # ==================== WARNINGS ====================
-    @warn_group.command(name="list", description="View warnings for a member")
+    @warn.command(name="list", description="View warnings for a member")
     @commands.has_permissions(moderate_members=True)
     @app_commands.describe(member="The member to check")
     async def warnings(self, ctx: commands.Context, member: discord.Member):
@@ -254,7 +243,7 @@ class Moderation(commands.Cog):
         await ctx.send(embed=embed)
 
     # ==================== CLEARWARN ====================
-    @warn_group.command(name="clear", description="Clear all warnings for a member")
+    @warn.command(name="clear", description="Clear all warnings for a member")
     @commands.has_permissions(administrator=True)
     @app_commands.describe(member="The member to clear warnings for")
     async def clearwarns(self, ctx: commands.Context, member: discord.Member):
@@ -299,7 +288,7 @@ class Moderation(commands.Cog):
     @commands.hybrid_group(name="channel", description="Channel moderation controls", fallback="lock")
     @commands.has_permissions(manage_channels=True)
     @commands.bot_has_permissions(manage_channels=True)
-    async def channel_group_cmd(self, ctx: commands.Context):
+    async def lock(self, ctx: commands.Context):
         """`/channel lock` — lock the current channel."""
         await self._lock_channel(ctx)
 
@@ -309,13 +298,7 @@ class Moderation(commands.Cog):
         await ctx.channel.set_permissions(ctx.guild.default_role, overwrite=overwrite)
         await ctx.send(embed=self.get_embed("🔒 Channel Locked", f"{ctx.channel.mention} has been locked."))
 
-    @channel_group.command(name="lock", description="Lock the current channel")
-    @commands.has_permissions(manage_channels=True)
-    @commands.bot_has_permissions(manage_channels=True)
-    async def lock(self, ctx: commands.Context):
-        await self._lock_channel(ctx)
-
-    @channel_group.command(name="unlock", description="Unlock the current channel")
+    @lock.command(name="unlock", description="Unlock the current channel")
     @commands.has_permissions(manage_channels=True)
     @commands.bot_has_permissions(manage_channels=True)
     async def unlock(self, ctx: commands.Context):
@@ -325,7 +308,7 @@ class Moderation(commands.Cog):
         await ctx.send(embed=self.get_embed("🔓 Channel Unlocked", f"{ctx.channel.mention} has been unlocked."))
 
     # ==================== SLOWMODE ====================
-    @channel_group.command(name="slowmode", description="Set slowmode for the channel")
+    @lock.command(name="slowmode", description="Set slowmode for the channel")
     @commands.has_permissions(manage_channels=True)
     @commands.bot_has_permissions(manage_channels=True)
     @app_commands.describe(seconds="Slowmode delay in seconds (0 to disable, max 21600)")
@@ -376,7 +359,7 @@ class Moderation(commands.Cog):
             await ctx.send(embed=self.get_embed("❌ Failed", str(e), 0xFF0000))
 
     # ==================== NUKE ====================
-    @channel_group.command(name="nuke", description="Clone and recreate the current channel, wiping all messages")
+    @lock.command(name="nuke", description="Clone and recreate the current channel, wiping all messages")
     @commands.has_permissions(manage_channels=True)
     @commands.bot_has_permissions(manage_channels=True)
     async def nuke(self, ctx: commands.Context):
@@ -430,7 +413,7 @@ class Moderation(commands.Cog):
             await ctx.send(embed=self.get_embed("❌ Failed", str(e), 0xFF0000))
 
     # ==================== HIDE / SHOW ====================
-    @channel_group.command(name="hide", description="Hide the current channel from @everyone")
+    @lock.command(name="hide", description="Hide the current channel from @everyone")
     @commands.has_permissions(manage_channels=True)
     @commands.bot_has_permissions(manage_channels=True)
     async def hide(self, ctx: commands.Context):
@@ -439,7 +422,7 @@ class Moderation(commands.Cog):
         await ctx.channel.set_permissions(ctx.guild.default_role, overwrite=overwrite)
         await ctx.send(embed=self.get_embed("🙈 Channel Hidden", f"{ctx.channel.mention} is now hidden from @everyone."))
 
-    @channel_group.command(name="show", description="Make a hidden channel visible to @everyone again")
+    @lock.command(name="show", description="Make a hidden channel visible to @everyone again")
     @commands.has_permissions(manage_channels=True)
     @commands.bot_has_permissions(manage_channels=True)
     async def show(self, ctx: commands.Context):
