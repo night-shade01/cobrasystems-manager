@@ -93,7 +93,7 @@ bot.footer = config.get("footer", "Cobra Systems™ Manager")
 _original_context_send = commands.Context.send
 
 
-async def send_response(ctx, **kwargs):
+async def send_response(ctx, *args, **kwargs):
     """Send a hidden (ephemeral) response for slash commands.
 
     Prefix commands keep their normal public replies; slash commands are
@@ -103,17 +103,17 @@ async def send_response(ctx, **kwargs):
 
     if interaction is None:
         kwargs.pop("ephemeral", None)
-        return await _original_context_send(ctx, **kwargs)
+        return await _original_context_send(ctx, *args, **kwargs)
 
     kwargs.setdefault("ephemeral", True)
     try:
         if interaction.response.is_done():
-            return await interaction.followup.send(**kwargs)
-        return await interaction.response.send_message(**kwargs)
+            return await interaction.followup.send(*args, **kwargs)
+        return await interaction.response.send_message(*args, **kwargs)
     except (discord.NotFound, discord.HTTPException):
         fallback_kwargs = dict(kwargs)
         fallback_kwargs.pop("ephemeral", None)
-        return await ctx.channel.send(**fallback_kwargs)
+        return await ctx.channel.send(*args, **fallback_kwargs)
 
 
 async def send_public(ctx, *args, **kwargs):
