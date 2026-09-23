@@ -54,7 +54,11 @@ class YTNotifications(commands.Cog):
                 pass
 
     async def _check_single_feed(self, sub):
-        """Check and post updates for a single subscription."""
+        """Check and post updates for a single subscription using API only."""
+        # API key is required for auto-polling
+        if not self.api_key:
+            return
+            
         channel_id = sub.get("channel_id")
         # resolve if not a UC id
         if channel_id and not channel_id.startswith("UC"):
@@ -66,48 +70,25 @@ class YTNotifications(commands.Cog):
         guild_id = int(sub.get("guild_id"))
         notify_channel_id = int(sub.get("notify_channel"))
         notify_role_id = sub.get("notify_role")
-        # Prefer API if key is available
+        
+        # Use API to fetch latest video
         vid = None
         title_text = None
         thumbnail = None
         channel_title = None
         published_at = None
         description = None
-        if self.api_key:
-            try:
-                latest = await self.get_latest_video_via_api(channel_id)
-                if latest:
-                    vid = latest.get("videoId")
-                    title_text = latest.get("title")
-                    thumbnail = latest.get("thumbnail")
-                    channel_title = latest.get("channelTitle")
-                    published_at = latest.get("publishedAt")
-                    description = latest.get("description")
-            except Exception:
-                vid = None
-
-        # Fallback to RSS feed if API not available or failed
-        if not vid:
-            feed_url = f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
-            try:
-                async with self.session.get(feed_url, timeout=20) as resp:
-                    if resp.status == 200:
-                        text = await resp.text()
-                        root = ET.fromstring(text)
-                        entry = root.find('{http://www.w3.org/2005/Atom}entry')
-                        if entry is None:
-                            return
-                        video_id = entry.find('{http://www.youtube.com/xml/schemas/2015}videoId')
-                        title = entry.find('{http://www.w3.org/2005/Atom}title')
-                        media_thumbnail = entry.find('{http://search.yahoo.com/mrss/}group/{http://search.yahoo.com/mrss/}thumbnail')
-                        if video_id is None or title is None:
-                            return
-                        vid = video_id.text
-                        title_text = title.text
-                        if media_thumbnail is not None and 'url' in media_thumbnail.attrib:
-                            thumbnail = media_thumbnail.attrib['url']
-            except Exception:
-                return
+        try:
+            latest = await self.get_latest_video_via_api(channel_id)
+            if latest:
+                vid = latest.get("videoId")
+                title_text = latest.get("title")
+                thumbnail = latest.get("thumbnail")
+                channel_title = latest.get("channelTitle")
+                published_at = latest.get("publishedAt")
+                description = latest.get("description")
+        except Exception:
+            return
 
         if not vid:
             return
