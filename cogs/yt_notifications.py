@@ -456,6 +456,9 @@ class YTNotifications(commands.Cog):
             await ctx.send(f"No videos found or could not fetch from channel `{resolved}`.")
             return
 
+        # Reverse to post oldest first, then newest
+        videos.reverse()
+
         await ctx.send(f"Posting {len(videos)} video(s) from **{channel_title or resolved}** with {delay_seconds}s delay between posts...", ephemeral=True)
 
         # Post each video one at a time
