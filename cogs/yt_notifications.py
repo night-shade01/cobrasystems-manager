@@ -3,6 +3,7 @@ import aiohttp
 import asyncio
 import discord
 from discord.ext import commands
+from discord import app_commands
 import xml.etree.ElementTree as ET
 import re
 from datetime import datetime, timezone
@@ -347,8 +348,13 @@ class YTNotifications(commands.Cog):
         except Exception:
             return [], None
 
-    @commands.command(name="ytsub", description="Subscribe this server to a YouTube channel")
+    @commands.hybrid_command(name="ytsub", description="Subscribe this server to a YouTube channel")
     @commands.has_permissions(manage_guild=True)
+    @app_commands.describe(
+        channel_identifier="Channel ID (UC...) or channel URL",
+        notify_channel="Channel to send notifications to (defaults to current channel)",
+        notify_role="Role to mention when a video is posted"
+    )
     async def ytsub(self, ctx, channel_identifier: str, notify_channel: discord.TextChannel = None, notify_role: discord.Role = None):
         """Subscribe this server to a YouTube channel's uploads. channel_identifier may be a channel ID or full channel URL.
         Example: !ytsub UC_xxx #youtube @Updates"""
@@ -394,8 +400,9 @@ class YTNotifications(commands.Cog):
         role_text = f" and ping {notify_role.mention}" if notify_role else ""
         await ctx.send(f"Subscribed to uploads from `{resolved}` and will notify in {notify_channel.mention}{role_text}.")
 
-    @commands.command(name="ytunsub", description="Remove a YouTube subscription from this server")
+    @commands.hybrid_command(name="ytunsub", description="Remove a YouTube subscription from this server")
     @commands.has_permissions(manage_guild=True)
+    @app_commands.describe(channel_id="The YouTube channel ID (UC...) to unsubscribe from")
     async def ytunsub(self, ctx, channel_id: str):
         subs = self.bot.config.setdefault("youtube_subscriptions", [])
         before = len(subs)
@@ -404,8 +411,13 @@ class YTNotifications(commands.Cog):
         self.bot.save_config()
         await ctx.send(f"Unsubscribed `{channel_id}` for this server.")
 
-    @commands.command(name="ytpostall", description="Post all videos from a YouTube channel one at a time")
+    @commands.hybrid_command(name="ytpostall", description="Post all videos from a YouTube channel one at a time")
     @commands.has_permissions(manage_guild=True)
+    @app_commands.describe(
+        channel_identifier="Channel ID (UC...), handle (@channelname), or URL",
+        max_videos="Maximum number of videos to post (1-50, default 10)",
+        delay_seconds="Delay between posts in seconds (default 2.0)"
+    )
     async def ytpostall(self, ctx, channel_identifier: str, max_videos: int = 10, delay_seconds: float = 2.0):
         """Post all videos from a YouTube channel to the current channel, one at a time.
         
