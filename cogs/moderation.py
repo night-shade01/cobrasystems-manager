@@ -265,13 +265,23 @@ class Moderation(commands.Cog):
     @commands.has_permissions(manage_messages=True)
     @commands.bot_has_permissions(manage_messages=True)
     @app_commands.describe(amount="Number of messages to delete (1-100)", member="Only delete messages from this member")
-    async def purge(self, ctx: commands.Context, amount: int, member: discord.Member = None):
+    async def purge(self, ctx: commands.Context, amount: int, member: discord.User = None):
         if amount < 1 or amount > 100:
             return await ctx.send(embed=self.get_embed("⚠️ Invalid Amount", "Please provide a number between 1 and 100.", 0xFFAA00))
 
+        if ctx.interaction is not None:
+            await ctx.defer(ephemeral=True)
+
+        matched = 0
+
         def check(msg):
+            nonlocal matched
+            if msg.id == getattr(ctx.message, "id", None) and ctx.interaction is None:
+                return False
             if member:
-                return msg.author.id == member.id
+                if msg.author.id != member.id or matched >= amount:
+                    return False
+                matched += 1
             return True
 
         # Delete the command message first if prefix
@@ -281,7 +291,9 @@ class Moderation(commands.Cog):
             except Exception:
                 pass
 
-        deleted = await ctx.channel.purge(limit=amount, check=check)
+        # With a user filter, scan further back so older messages from them are found
+        scan_limit = 1000 if member else amount
+        deleted = await ctx.channel.purge(limit=scan_limit, check=check)
         await ctx.send(embed=self.get_embed("🧹 Purged", f"Deleted **{len(deleted)}** message(s)."))
 
     # ==================== LOCK / UNLOCK ====================
