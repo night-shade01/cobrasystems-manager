@@ -5,5 +5,6 @@
   "auto_role": {},
   "welcome_channel": {},
   "log_channel": {},
-  "reaction_roles": {}
+  "reaction_roles": {},
+  "blocked_guilds": []
 }

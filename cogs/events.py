@@ -17,6 +17,16 @@ class Events(commands.Cog):
         return embed
 
     @commands.Cog.listener()
+    async def on_guild_join(self, guild: discord.Guild):
+        """Leave immediately when a previously blocked server invites the bot back."""
+        blocked_guilds = self.bot.config.get("blocked_guilds", [])
+        if guild.id in blocked_guilds or str(guild.id) in blocked_guilds:
+            try:
+                await guild.leave()
+            except discord.HTTPException:
+                pass
+
+    @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member):
         guild = member.guild
         guild_id = str(guild.id)

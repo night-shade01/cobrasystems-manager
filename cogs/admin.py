@@ -72,6 +72,81 @@ class Admin(commands.Cog):
             await ctx.send(embed=self.get_embed("❌ Failed", str(e), 0xFF0000))
 
     @commands.is_owner()
+    @shutdown.command(name="servers", description="List every server the bot is in (owner only)")
+    async def servers(self, ctx: commands.Context):
+        """List joined servers and a permanent invite when one can be created."""
+        if not self.bot.guilds:
+            return await ctx.send(embed=self.get_embed("📋 Servers", "The bot is not in any servers."))
+
+        entries = []
+        for guild in sorted(self.bot.guilds, key=lambda item: item.name.lower()):
+            invite_url = "Invite unavailable (missing permission)"
+            for channel in guild.text_channels:
+                permissions = channel.permissions_for(guild.me) if guild.me else None
+                if not permissions or not permissions.create_instant_invite:
+                    continue
+                try:
+                    invite = await channel.create_invite(
+                        max_age=0,
+                        max_uses=0,
+                        unique=False,
+                        reason="Owner requested server list",
+                    )
+                    invite_url = invite.url
+                    break
+                except (discord.Forbidden, discord.HTTPException):
+                    continue
+
+            entries.append(f"**{guild.name}** (`{guild.id}`)\n{invite_url}")
+
+        # Keep each response below Discord's embed description limit.
+        for start in range(0, len(entries), 10):
+            page = entries[start:start + 10]
+            page_number = start // 10 + 1
+            total_pages = (len(entries) + 9) // 10
+            await ctx.send(embed=self.get_embed(
+                f"📋 Servers ({page_number}/{total_pages})",
+                "\n\n".join(page),
+            ))
+
+    @commands.is_owner()
+    @shutdown.command(name="leave", description="Leave and permanently block a server (owner only)")
+    @app_commands.describe(guild_id="The server ID to leave and block forever")
+    async def leave(self, ctx: commands.Context, guild_id: str):
+        """Block a guild, persist the block, then leave it."""
+        try:
+            guild_id = int(guild_id)
+        except ValueError:
+            return await ctx.send(embed=self.get_embed("❌ Invalid server ID", "Server ID must be a number.", 0xFF0000))
+
+        blocked_guilds = self.bot.config.setdefault("blocked_guilds", [])
+        if guild_id not in blocked_guilds:
+            blocked_guilds.append(guild_id)
+            self.bot.save_config()
+
+        guild = self.bot.get_guild(guild_id)
+        if guild is None:
+            return await ctx.send(embed=self.get_embed(
+                "✅ Server blocked",
+                f"`{guild_id}` is now permanently blocked. The bot was not currently in that server.",
+            ))
+
+        guild_name = guild.name
+        try:
+            await guild.leave()
+        except discord.HTTPException as error:
+            return await ctx.send(embed=self.get_embed(
+                "⚠️ Server blocked, but still joined",
+                f"**{guild_name}** (`{guild_id}`) is blocked, but Discord rejected the leave request: `{error}`",
+                0xFFAA00,
+            ))
+
+        await ctx.send(embed=self.get_embed(
+            "✅ Left and blocked server",
+            f"Left **{guild_name}** (`{guild_id}`). The bot will automatically leave if it is invited back.",
+        ))
+
+    @commands.is_owner()
     @shutdown.command(name="eval", description="Evaluate Python code (owner only)")
     async def _eval(self, ctx: commands.Context, *, body: str):
         env = {
